@@ -12,6 +12,7 @@
 # Date: 14-Dec-2020
 
 import os
+import shutil
 # logging config
 import logging
 import requests
@@ -19,6 +20,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import json
 import datetime
+from dateutil import relativedelta
 import re
 import warnings
 warnings.filterwarnings('ignore')
@@ -29,9 +31,10 @@ from package import job104
 # config
 ENCODE = 'utf-8'
 PROJECT = 'job104'
-TMP_DIR = './dataset/'
-OUTPUT_DIR = './output/'
-LOG_DIR = './log/'
+PATH = '/scraper/job104'
+TMP_DIR = os.path.join(PATH, 'dataset')
+OUTPUT_DIR = os.path.join(PATH, 'output')
+LOG_DIR = os.path.join(PATH, 'log')
 today = datetime.datetime.today()
 today_yyyymmdd = today.strftime('%Y%m%d')
 this_month = today.strftime('%Y%m')
@@ -41,19 +44,24 @@ year = datetime.datetime.now().strftime('%Y')
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s  %(name)s  %(levelname)s  %(message)s',
                     datefmt='%m-%d %H:%M',
-                    handlers = [logging.FileHandler(f'{LOG_DIR}{PROJECT}_{today_yyyymmdd}.txt', 'a', 'utf-8'),])
+                    handlers = [logging.FileHandler(f'{LOG_DIR}/{PROJECT}_{today_yyyymmdd}.txt', 'a', 'utf-8'),])
 # start
 start = datetime.datetime.now() 
 logging.info('START')
+print('START')
 # mv file
 try:
-    file_list = [f for f in os.listdir(f'./OUTPUT') if os.path.isfile(os.path.join(OUTPUT_DIR, f))]
+    file_list = [f for f in os.listdir(OUTPUT_DIR) if os.path.isfile(os.path.join(OUTPUT_DIR, f))]
     for f in file_list:
-        shutil.move(os.path.join(OUTPUT_DIR, f), os.path.join(OUTPUT_DIR, 'his'))
+        # shutil.move(os.path.join(OUTPUT_DIR, f), os.path.join(OUTPUT_DIR, 'his'))
+        shutil.copy(os.path.join(OUTPUT_DIR, f), os.path.join(OUTPUT_DIR, 'his'))
+        os.remove(os.path.join(OUTPUT_DIR, f))
     logging.info(f'move {len(file_list)} files')
+    print(f'move {len(file_list)} files')
 except Exception as e:
     logging.warning(f'mv file: {e}')  
-                    
+    print(f'mv file: {e}')
+              
 # set cates
 ind_list = ['1003001000','1003002000','1005001000','1005002000','1005003000','1006001000',
             '1006002000','1006003000','1007001000','1009001000','1009002000','1009004000',
@@ -83,36 +91,27 @@ Upgrade-Insecure-Requests: 1
 User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.132 Safari/537.36"""
 for d in original_headers_str.split('\n'):
     headers[d.split(': ')[0]] = d.split(': ')[1].strip()
-
-# init
-result_df = pd.DataFrame()
-company_df = pd.DataFrame()
-url_list = job104.create_url_list(ind_list)                    
-# start scraper
-for i, url in enumerate(url_list):    
-    try:
-        tmp_df = job104.create_comp_df(url, headers)
-        tmp_df = tmp_df[~tmp_df['url'].isnull()].reset_index(drop=True)
-        target_url_list = tmp_df['url']
-        refer_url_list = tmp_df['refer_url']
-        target_id_list = tmp_df['target_id']
-        results_list = []
-        time.sleep(1)
-              
-        for target_url, refer_url, target_id in zip(target_url_list, refer_url_list, target_id_list):
-            if url is not None:
-                try:
-                    job, appear_date = job104.create_job(target_url, refer_url)
-                    results = {}
-                    results['target_id'] = target_id
-                    results['url'] = target_url
-                    results['job'] = job
-                    results['appear_date'] = appear_date
-                    results_list.append(results)
-                except Exception as e:
+    
+if __name__ == '__main__':   
+    # init
+    result_df = pd.DataFrame()
+    company_df = pd.DataFrame()
+    url_list = job104.create_url_list(ind_list, headers, logging)                    
+    # start scraper
+    for i, url in enumerate(url_list):    
+        try:
+            tmp_df = job104.create_comp_df(url, headers, logging)
+            tmp_df = tmp_df[~tmp_df['url'].isnull()].reset_index(drop=True)
+            target_url_list = tmp_df['url']
+            refer_url_list = tmp_df['refer_url']
+            target_id_list = tmp_df['target_id']
+            results_list = []
+            time.sleep(2.5)
+                  
+            for target_url, refer_url, target_id in zip(target_url_list, refer_url_list, target_id_list):
+                if url is not None:
                     try:
-                        time.sleep(60)
-                        job, appear_date = job104.create_job(target_url, refer_url)
+                        job, appear_date = job104.create_job(target_url, refer_url, logging)
                         results = {}
                         results['target_id'] = target_id
                         results['url'] = target_url
@@ -120,33 +119,48 @@ for i, url in enumerate(url_list):
                         results['appear_date'] = appear_date
                         results_list.append(results)
                     except Exception as e:
-                        logging.error(f'phase2 error:{e} in {url}')
+                        try:
+                            time.sleep(60)
+                            job, appear_date = job104.create_job(target_url, refer_url)
+                            results = {}
+                            results['target_id'] = target_id
+                            results['url'] = target_url
+                            results['job'] = job
+                            results['appear_date'] = appear_date
+                            results_list.append(results)
+                        except Exception as e:
+                            logging.error(f'phase2 error:{e} in {url}')
+                            print(f'phase 2 error: {e} in {url}')
 
-        company_df = pd.concat([company_df, tmp_df])
-        result_df = pd.concat([result_df, pd.DataFrame(results_list)])
+            company_df = pd.concat([company_df, tmp_df])
+            result_df = pd.concat([result_df, pd.DataFrame(results_list)])
 
-        if i % 10 == 0:
-            time.sleep(10)
-            #company_df.to_csv(f'company_df_{today}_tmp.csv', index=False)
-            #result_df.to_csv(f'result_df_{today}_tmp.csv', index=False)
-            #print(f'{i} / {len(url_list)}')  
-    except Exception as e:
+            if i % 10 == 0:
+                time.sleep(15)
+                #company_df.to_csv(f'company_df_{today}_tmp.csv', index=False)
+                #result_df.to_csv(f'result_df_{today}_tmp.csv', index=False)
+            if i % 100 == 0:
+                print(f'{i} / {len(url_list)}')  
+                
+        except Exception as e:
 
-        logging.error(f'phase1 error:{e} in {url}')
-# merge df & clean files    
-company_df_clean = company_df[~company_df['url'].isnull()].reset_index(drop=True)
-result_df_clean = result_df[~result_df['url'].isnull()].reset_index(drop=True)
-final_df = pd.merge(company_df_clean, result_df_clean, on=['target_id', 'url'])
-final_df['snap_date'] = today
-final_df['appear_date'] = final_df['appear_date'].apply(lambda x: datetime.datetime \
-                                                                          .strptime(year+'/'+x, "%Y/%m/%d") \
-                                                                          .strftime('%Y%m%d') if x is not None else None)
-final_df = final_df.drop(['url', 'refer_url', 'target_id'], axis=1)
-final_df.to_csv(f'./{OUTPUT_DIR}/job104_{this_month}.csv', index=False)              
-# end
-end = datetime.datetime.now() 
-delta = str(end - start)
-logging.info(f'DONE, time:{delta}')
-logging.shutdown()    
+            logging.error(f'phase1 error:{e} in {url}')
+            print(f'phase 1 error: {e} in {url}')
+    # merge df & clean files    
+    company_df_clean = company_df[~company_df['url'].isnull()].reset_index(drop=True)
+    result_df_clean = result_df[~result_df['url'].isnull()].reset_index(drop=True)
+    final_df = pd.merge(company_df_clean, result_df_clean, on=['target_id', 'url'])
+    final_df['snap_date'] = today
+    final_df['appear_date'] = final_df['appear_date'].apply(lambda x: datetime.datetime \
+                                                                              .strptime(year+'/'+x, "%Y/%m/%d") \
+                                                                              .strftime('%Y%m%d') if x is not None else None)
+    final_df = final_df.drop(['url', 'refer_url', 'target_id'], axis=1)
+    final_df.to_csv(f'{OUTPUT_DIR}/job104.{today_yyyymmdd}', index=False)              
+    # end
+    end = datetime.datetime.now() 
+    delta = str(end - start)
+    logging.info(f'DONE, time:{delta}')
+    print(f'DONE, time: {delta}')
+    logging.shutdown()    
 
                    
