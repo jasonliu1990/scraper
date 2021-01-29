@@ -25,9 +25,10 @@ from package import gcis
 # config
 ENCODE = 'utf-8'
 PROJECT = 'gcis'
-TMP_DIR = './dataset/'
-OUTPUT_DIR = './output/'
-LOG_DIR = './log/'
+PATH = '/scraper/data_gov_gcis'
+TMP_DIR = os.path.join(PATH, 'dataset')
+OUTPUT_DIR = os.path.join(PATH, 'output')
+LOG_DIR = os.path.join(PATH, 'log')
 today = datetime.datetime.today()
 today_yyyymmdd = today.strftime('%Y%m%d')
 this_month = today.strftime('%Y%m')
@@ -37,17 +38,21 @@ once = True
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s  %(name)s  %(levelname)s  %(message)s',
                     datefmt='%m-%d %H:%M',
-                    handlers = [logging.FileHandler(f'{LOG_DIR}{PROJECT}_{today_yyyymmdd}.txt', 'a', 'utf-8'),])
+                    handlers = [logging.FileHandler(f'{LOG_DIR}/{PROJECT}_{today_yyyymmdd}.txt', 'a', 'utf-8'),])
 # start
 start = datetime.datetime.now() 
 logging.info('START')
 try:
-    file_list = [f for f in os.listdir(f'./OUTPUT') if os.path.isfile(os.path.join(OUTPUT_DIR, f))]
+    file_list = [f for f in os.listdir(OUTPUT_DIR) if os.path.isfile(os.path.join(OUTPUT_DIR, f))]
     for f in file_list:
-        shutil.move(os.path.join(OUTPUT_DIR, f), os.path.join(OUTPUT_DIR, 'his'))
+       # shutil.move(os.path.join(OUTPUT_DIR, f), os.path.join(OUTPUT_DIR, 'his'))
+        shutil.copy(os.path.join(OUTPUT_DIR, f), os.path.join(OUTPUT_DIR, 'his'))
+        os.remove(os.path.join(OUTPUT_DIR, f))
     logging.info(f'move {len(file_list)} files')
+    print(f'move {len(file_list)} files')
 except Exception as e:
     logging.warning(f'mv file: {e}')  
+    print(f'mv file: {e}')
 # url
 # 公司設立登記清冊
 url_1 = 'https://data.gcis.nat.gov.tw/od/detail?oid=AD28285B-7B0E-4241-9F58-F2F0F289333E#moreBtn'
@@ -62,46 +67,60 @@ url_5 = 'https://data.gcis.nat.gov.tw/od/detail?oid=EE1F22A1-CC3D-465E-83DF-0164
 # 商業變更登記清冊(月份)
 url_6 = 'https://data.gcis.nat.gov.tw/od/detail?oid=136231C9-362B-4D30-BDC4-EC90DCA5DEF1#moreBtn'
 
-url_list = [eval(f'url_{i}') for i in range(1,7)]
-data_list = []
-for url in url_list:
-    try:
-        file_list = gcis.create_file_list(url)
-        data = gcis.download_data(file_list, once=once)
-        data_list.append(data)
-    except Exception as e:
-        logging.error(f'part1: download, error:{e}')
-s_list = ['設立','變更','解散','設立','變更','歇業']
-for i, s in zip(range(6), s_list):
-    try:
-        data_list[i]['status'] = s    
-    except Exception as e:
-        logging.error(f'part2-1: add status, error:{e}')
+if __name__ == '__main__':
 
-company_reg = pd.DataFrame()
-commercial_reg = pd.DataFrame()
-for i, df in enumerate(data_list):
-    try:
-        if i < 3:
-            df = gcis.transfer_data(df, cate='company')
-            company_reg = pd.concat([company_reg, df])
-            company_reg = company_reg.reset_index(drop=True)
-        else:
-            df = gcis.transfer_data(df, cate='commercial')
-            commercial_reg = pd.concat([commercial_reg, df])
-            commercial_reg = commercial_reg.reset_index(drop=True)            
-    except Exception as e:
-        logging.error(f'part2-2: transfer data, error:{e}')
+    url_list = [eval(f'url_{i}') for i in range(1,7)]
+    data_list = []
+    for url in url_list:
+        try:
+            file_list = gcis.create_file_list(url)
+            data = gcis.download_data(file_list, once=once)
+            data_list.append(data)
+        except Exception as e:
+            logging.error(f'part1: download, error:{e}')
+            print(f'part1: download, error:{e}')
+    s_list = ['設立','變更','解散','設立','變更','歇業']
+    for i, s in zip(range(6), s_list):
+        try:
+            data_list[i]['status'] = s    
+        except Exception as e:
+            logging.error(f'part2-1: add status, error:{e}')
+            print(f'part2-1: add status, error:{e}')
+    company_reg = pd.DataFrame()
+    commercial_reg = pd.DataFrame()
+    for i, df in enumerate(data_list):
+        try:
+            if i < 3:
+                df = gcis.transfer_data(df, cate='company')
+                company_reg = pd.concat([company_reg, df])
+                company_reg = company_reg.reset_index(drop=True)
+            else:
+                df = gcis.transfer_data(df, cate='commercial')
+                commercial_reg = pd.concat([commercial_reg, df])
+                commercial_reg = commercial_reg.reset_index(drop=True)            
+        except Exception as e:
+            logging.error(f'part2-2: transfer data, error:{e}')
+            print(f'part2-2: transfer data, error:{e}')
 
-try:
-    company_reg = gcis.clean_data(company_reg)
-    commercial_reg = gcis.clean_data(commercial_reg)
-except:
-    logging.error(f'part3: clean data, error:{e}')
-else:
-    company_reg.to_csv(f'./{OUTPUT_DIR}/company_reg_{this_month}.csv', index=False)
-    commercial_reg.to_csv(f'./{OUTPUT_DIR}/commercial_reg_{this_month}.csv', index=False)
-end = datetime.datetime.now() 
-delta = str(end - start)
-logging.info(f'DONE, time:{delta}')
-logging.shutdown()    
+    try:
+        company_reg = gcis.clean_data(company_reg)
+        commercial_reg = gcis.clean_data(commercial_reg)
+    except Exception as e:
+        logging.error(f'part3: clean data, error:{e}')
+        print(f'part3: clean data, error:{e}')
+    else:
+        company_reg.to_csv(f'{TMP_DIR}/company_reg.{today_yyyymmdd}', index=False)
+        commercial_reg.to_csv(f'{TMP_DIR}/commercial_reg.{today_yyyymmdd}', index=False)
+        gcis_reg = pd.concat([company_reg, commercial_reg]).reset_index(drop=True)
+        gcis_reg = gcis_reg[['cate','company_id','company_name','company_addr',
+                             'representative','capital','type','create_dt','modify_dt',
+                             'close_dt','status','snap_yyyymm']]
+
+        gcis_reg['type'] = gcis_reg['type'].fillna('').apply(lambda x: None if x == '' else x)
+        gcis_reg.to_csv(f'{OUTPUT_DIR}/gcis_reg.{today_yyyymmdd}', index=False)
+    
+    end = datetime.datetime.now() 
+    delta = str(end - start)
+    logging.info(f'DONE, time:{delta}')
+    print(f'DONE, time:{delta}')
+    logging.shutdown()    
