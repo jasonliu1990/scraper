@@ -13,10 +13,15 @@ from bs4 import BeautifulSoup
 import pandas as pd
 
 def download_file(url: str, place_holder, ec: bool=False) -> pd.DataFrame:
-
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.113 Safari/537.36',
+        'Referer': 'https://www.nccc.com.tw/wps/wcm/connect/zh/home/openinformation/CreditCardData',
+        'Origin': 'https://www.nccc.com.tw'
+    }
     if not ec:
         url_2 = url.replace(place_holder, '1')
-        r = requests.get(url_2, verify=False)
+        r = requests.get(url_2, verify=False, headers=headers)
         soup = BeautifulSoup(r.text, 'html.parser')
         page_list = soup.find('div', attrs={'class': "page"}).findAll('a')
         last_page = max([eval(p.text) for p in page_list if p.text.isnumeric()]) 
@@ -24,7 +29,7 @@ def download_file(url: str, place_holder, ec: bool=False) -> pd.DataFrame:
         for i in range(1, last_page):
             try:
                 url_2 = url.replace(place_holder, str(i))
-                r = requests.get(url_2, verify=False)
+                r = requests.get(url_2, verify=False, headers=headers)
                 soup = BeautifulSoup(r.text, 'html.parser')
                 title_list = soup.findAll('td', attrs={'style': "vertical-align: middle;text-align:left"})
                 title_list = [t.text for t in title_list]
@@ -48,14 +53,14 @@ def download_file(url: str, place_holder, ec: bool=False) -> pd.DataFrame:
                     else:                           
                         df['file_title'] = t
                         data = pd.concat([data, df])
-                    time.sleep(0.5)
+                    time.sleep(1)
 
                 except Exception as e:
                     print(e)
                     print(f)
             time.sleep(1)
     if ec:
-        r = requests.get(url, verify=False)
+        r = requests.get(url, verify=False, headers=headers)
         soup = BeautifulSoup(r.text, 'html.parser')
         file_list = soup.findAll('a', attrs={'class': "btn2"})
         file_list = [f['href'] for f in file_list]
