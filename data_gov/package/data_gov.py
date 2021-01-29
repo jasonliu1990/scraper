@@ -123,7 +123,3 @@ def clean_concat_org(gov_url: str, edu_url: str, org_url: str) -> pd.DataFrame:
     final_df = final_df.reset_index(drop=True)
     final_df['snap_yyyymm'] = datetime.datetime.now().strftime('%Y%m')
     return final_df
-
-
-
-
