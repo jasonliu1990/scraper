@@ -11,7 +11,7 @@ import http.client
 http.client._MAXLINE = 655360
 
 # 建立全部的 url_list
-def create_url_list(ind_list:list) -> list:
+def create_url_list(ind_list:list, headers:dict, logging) -> list:
     """ ind_list: 目標cate網址
     """
     target_list = []
@@ -30,12 +30,13 @@ def create_url_list(ind_list:list) -> list:
                 page = f'page={p}'
                 url = url.replace(f'page={p-1}', page)
                 url_list.append(url)
+            time.sleep(3)
         except Exception as e:
             logging.error(f'check error:{e}')
     print(f'total url: {len(url_list)}')
     return url_list
 # 爬蟲 function
-def create_comp_df(url:str, headers:set) -> pd.DataFrame:
+def create_comp_df(url:str, headers:set, logging) -> pd.DataFrame:
     """ 用url 拿到公司基本訊息的dataframe
     """
     r = requests.get(url, verify=False, headers=headers)
@@ -92,7 +93,7 @@ def create_comp_df(url:str, headers:set) -> pd.DataFrame:
     return comp_df
 
 # 查職缺數
-def create_job(url:str, refer_url:str) -> tuple:
+def create_job(url:str, refer_url:str, logging) -> tuple:
     
     try:
         headers_2 = {}
