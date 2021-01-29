@@ -8,7 +8,9 @@
 #
 # Author: Chiata Liu
 # Date: 23-SEP-2019
+# 每周一更新
 import os
+import shutil
 import logging
 import warnings
 warnings.filterwarnings('ignore')
@@ -20,16 +22,17 @@ import datetime
 import pandas as pd
 import numpy as np
 import random
-import time
 from dateutil import relativedelta
 # import package
 from package import pcc_gov
+
 # config
 ENCODE = 'utf-8'
 PROJECT = 'pcc_gov'
-TMP_DIR = './dataset/'
-OUTPUT_DIR = './output/'
-LOG_DIR = './log/'
+PATH = '/scraper/pcc_gov'
+TMP_DIR = os.path.join(PATH, 'dataset')
+OUTPUT_DIR = os.path.join(PATH, 'output')
+LOG_DIR = os.path.join(PATH, 'log')
 today = datetime.datetime.today()
 today_yyyymmdd = today.strftime('%Y%m%d')
 this_month = today.strftime('%Y%m')
@@ -39,44 +42,54 @@ year = datetime.datetime.now().strftime('%Y')
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s  %(name)s  %(levelname)s  %(message)s',
                     datefmt='%m-%d %H:%M',
-                    handlers = [logging.FileHandler(f'{LOG_DIR}{PROJECT}_{today_yyyymmdd}.txt', 'a', 'utf-8'),])
+                    handlers = [logging.FileHandler(f'{LOG_DIR}/{PROJECT}_{today_yyyymmdd}.txt', 'a', 'utf-8'),])
 # start
 start = datetime.datetime.now() 
 logging.info('START')
+print('START')
 # mv file
 try:
-    file_list = [f for f in os.listdir(f'./OUTPUT') if os.path.isfile(os.path.join(OUTPUT_DIR, f))]
+    file_list = [f for f in os.listdir(OUTPUT_DIR) if os.path.isfile(os.path.join(OUTPUT_DIR, f))]
     for f in file_list:
-        shutil.move(os.path.join(OUTPUT_DIR, f), os.path.join(OUTPUT_DIR, 'his'))
+        # shutil.move(os.path.join(OUTPUT_DIR, f), os.path.join(OUTPUT_DIR, 'his'))
+        shutil.copy(os.path.join(OUTPUT_DIR, f), os.path.join(OUTPUT_DIR, 'his'))
+        os.remove(os.path.join(OUTPUT_DIR, f))
     logging.info(f'move {len(file_list)} files')
+    print(f'move {len(file_list)} files')
 except Exception as e:
-    logging.warning(f'mv file: {e}')  
+    logging.warning(f'mv file: {e}') 
+    print(f'mv file: {e}')   
+
+if __name__ == '__main__':
     
-# 過去一週
-date_list = []
-for i in range(3, 10):
-    date_list.append((datetime.datetime.now() - datetime.timedelta(days=today.weekday() + i)).strftime('%Y%m%d'))
-# 取得每天的資料
-comp_df_all = pd.DataFrame()
-for date in date_list:
-    try:
-        comp_df_all = pd.concat([comp_df_all, pcc_gov.pcc_gov(date)])
+    # 過去一週
+    date_list = []
+    for i in range(3, 10):
+        date_list.append((datetime.datetime.now() - datetime.timedelta(days=today.weekday() + i)).strftime('%Y%m%d'))
+    # 取得每天的資料
+    comp_df_all = pd.DataFrame()
+    for date in date_list:
+        try:
+            comp_df_all = pd.concat([comp_df_all, pcc_gov.pcc_gov(date)])
+        except Exception as e:
+            logging.error(f'part1: {e}')  
+            print(f'part1: {e}')  
+
+    try:        
+        comp_df = comp_df_all.copy()
+        comp_df_cln = pcc_gov.clean_data(comp_df)
+        comp_df = comp_df.reset_index(drop=True)
+        comp_df_cln = comp_df_cln.reset_index(drop=True)
     except Exception as e:
-        logging.error(f'part1: {e}')        
-try:        
-    comp_df = comp_df_all.copy()
-    comp_df_cln = pcc_gov.clean_data(comp_df)
-    comp_df = comp_df.reset_index(drop=True)
-    comp_df_cln = comp_df_cln.reset_index(drop=True)
-except Exception as e:
-    logging.error(f'part2: {e}')
-    
-# 寫檔
-comp_df_cln.to_csv(f'./{OUTPUT_DIR}/pcc_gov_{today_yyyymmdd}.csv', index=False)
-   
-# end
-end = datetime.datetime.now() 
-delta = str(end - start)
-logging.info(f'DONE, time:{delta}')
-logging.shutdown()   
-    
+        logging.error(f'part2: {e}')
+        print(f'part2: {e}')
+
+    # 寫檔
+    comp_df_cln.to_csv(f'{OUTPUT_DIR}/{PROJECT}.{today_yyyymmdd}', index=False)
+
+    # end
+    end = datetime.datetime.now() 
+    delta = str(end - start)
+    logging.info(f'DONE, time:{delta}')
+    print(f'DONE, time:{delta}')
+    logging.shutdown()   
